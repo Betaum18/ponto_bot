@@ -195,7 +195,7 @@ class PontoView(discord.ui.View):
             session_inicio=result.get("session_inicio"),
             horas_semana=result.get("horas_semana", 0.0),
         )
-        await interaction.message.edit(embed=embed, view=view or self)
+        await interaction.message.edit(embed=embed, view=view if view is not None else PontoView())
 
     # ── buttons ───────────────────────────────────────────────────────────────
 
