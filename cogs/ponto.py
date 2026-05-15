@@ -4,10 +4,10 @@ import os
 import discord
 import pytz
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 
 from utils.appscript import call_api
-from views.ponto_view import build_ponto_embed, fmt_horas
+from views.ponto_view import PontoView, build_ponto_embed, fmt_horas, _fmt_week
 from views.registro_view import RegistroView
 
 TIMEZONE: str = os.getenv("TIMEZONE", "America/Sao_Paulo")
@@ -42,6 +42,89 @@ def require_adm():
 class PontoCog(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
+        self.saturday_close.start()
+
+    def cog_unload(self) -> None:
+        self.saturday_close.cancel()
+
+    # ── Task: encerramento automático sábado 12h ──────────────────────────────
+
+    # 12h BRT = 15h UTC (Brasil não usa horário de verão desde 2019)
+    @tasks.loop(time=datetime.time(hour=15, minute=0))
+    async def saturday_close(self) -> None:
+        tz = pytz.timezone(TIMEZONE)
+        if datetime.datetime.now(tz).weekday() != 5:  # 5 = sábado
+            return
+
+        result = await call_api("close_all_week")
+        if not result.get("success"):
+            return
+
+        for session in result.get("closed", []):
+            await self._notify_thread_close(session)
+
+    @saturday_close.before_loop
+    async def before_saturday_close(self) -> None:
+        await self.bot.wait_until_ready()
+
+    async def _notify_thread_close(self, session: dict) -> None:
+        thread = self.bot.get_channel(int(session["thread_id"]))
+        if not isinstance(thread, discord.Thread):
+            return
+
+        member = thread.guild.get_member(int(session["user_id"]))
+        if not member:
+            return
+
+        horas  = session["horas_semana"]
+        meta   = session["meta_horas"]
+        status = session["status"]
+
+        # Atualiza embed fixado
+        try:
+            pins = await thread.pins()
+            for pin in pins:
+                if pin.author.bot and pin.embeds:
+                    embed = build_ponto_embed(
+                        member,
+                        week_start=session["week_start"],
+                        week_end=session["week_end"],
+                        meta_horas=meta,
+                        status=status,
+                        horas_semana=horas,
+                    )
+                    closed_view = PontoView()
+                    for item in closed_view.children:
+                        if hasattr(item, "custom_id") and item.custom_id == "ponto:justificativa":
+                            item.disabled = (status != "incompleto")
+                        else:
+                            item.disabled = True
+                    await pin.edit(embed=embed, view=closed_view)
+                    break
+        except discord.HTTPException:
+            pass
+
+        # Envia alerta na thread
+        try:
+            week_fmt = _fmt_week(session["week_start"], session["week_end"])
+            if status == "incompleto":
+                diff = meta - horas
+                await thread.send(
+                    f"⏰ **Encerramento automático — Sábado 12h**\n"
+                    f"⚠️ {member.mention} a meta semanal não foi atingida!\n"
+                    f"> Semana: **{week_fmt}**\n"
+                    f"> Trabalhado: **{fmt_horas(horas)}** | Meta: **{fmt_horas(meta)}** | "
+                    f"Faltaram: **{fmt_horas(diff)}**\n"
+                    f"Clique em **📝 Justificativa** para registrar o motivo."
+                )
+            else:
+                await thread.send(
+                    f"⏰ **Encerramento automático — Sábado 12h**\n"
+                    f"🎉 {member.mention} semana concluída! "
+                    f"Total: **{fmt_horas(horas)}** — Meta atingida!"
+                )
+        except discord.HTTPException:
+            pass
 
     ponto = app_commands.Group(name="ponto", description="Controle de ponto")
     admin = app_commands.Group(

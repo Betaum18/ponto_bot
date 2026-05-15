@@ -37,6 +37,7 @@ function doPost(e) {
       resume:            resumeSession,
       close:             closeSession,
       justify:           justifySession,
+      close_all_week:    closeAllWeek,
       get_all_users:     getAllUsers,
       set_meta:          setMeta,
       get_records:       getRecords,
@@ -499,6 +500,54 @@ function getRecords(body) {
   }
 
   return { success: true, records };
+}
+
+function closeAllWeek(_body) {
+  var sheet  = getRegistros();
+  var data   = sheet.getDataRange().getValues();
+  var bounds = getWeekBounds();
+  var closed = [];
+  var now    = new Date().toISOString();
+
+  for (var i = 1; i < data.length; i++) {
+    var status    = data[i][COL.STATUS];
+    var weekStart = String(data[i][COL.WEEK_START]);
+
+    if (weekStart !== bounds.start) continue;
+    if (status !== "ativo" && status !== "pausado" && status !== "aberto") continue;
+
+    var pausas = JSON.parse(data[i][COL.SESSION_PAUSAS_JSON] || "[]");
+
+    if (status === "pausado") {
+      for (var j = pausas.length - 1; j >= 0; j--) {
+        if (!pausas[j].fim) { pausas[j].fim = now; break; }
+      }
+    }
+
+    var sessionH  = (status === "ativo" || status === "pausado")
+      ? calcSessionHours(data[i][COL.SESSION_INICIO], now, JSON.stringify(pausas))
+      : 0;
+    var novaAcum  = Number(data[i][COL.HORAS_ACUMULADAS]) + sessionH;
+    var meta      = Number(data[i][COL.META_HORAS]);
+    var newStatus = novaAcum >= meta ? "fechado" : "incompleto";
+
+    sheet.getRange(i + 1, COL.HORAS_ACUMULADAS    + 1).setValue(novaAcum);
+    sheet.getRange(i + 1, COL.STATUS              + 1).setValue(newStatus);
+    sheet.getRange(i + 1, COL.SESSION_INICIO      + 1).setValue("");
+    sheet.getRange(i + 1, COL.SESSION_PAUSAS_JSON + 1).setValue("[]");
+
+    closed.push({
+      thread_id:    String(data[i][COL.THREAD_ID]),
+      user_id:      String(data[i][COL.USER_ID]),
+      horas_semana: novaAcum,
+      meta_horas:   meta,
+      week_start:   data[i][COL.WEEK_START],
+      week_end:     data[i][COL.WEEK_END],
+      status:       newStatus,
+    });
+  }
+
+  return { success: true, closed: closed };
 }
 
 // ── Setup único (rodar manualmente no IDE do Apps Script) ─────────────────────
