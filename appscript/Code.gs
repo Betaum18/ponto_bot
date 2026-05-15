@@ -375,9 +375,10 @@ function closeSession(body) {
   var bounds        = getWeekBounds();
   var atingiu       = novaAcum >= meta;
 
+  var temJustificativa = !!(r.data[COL.JUSTIFICATIVA] && String(r.data[COL.JUSTIFICATIVA]).trim());
   var newStatus;
   if (bounds.isSaturday && !atingiu) {
-    newStatus = "incompleto";
+    newStatus = temJustificativa ? "justificado" : "incompleto";
   } else if (bounds.isSaturday && atingiu) {
     newStatus = "fechado";
   } else {
@@ -405,13 +406,21 @@ function closeSession(body) {
 function justifySession(body) {
   var r = findRegistroByThreadId(body.thread_id);
   if (!r) return { success: false, error: "Sessão não encontrada" };
-  if (r.data[COL.STATUS] !== "incompleto") {
-    return { success: false, error: "Justificativa só é necessária em semanas incompletas" };
+
+  var status = r.data[COL.STATUS];
+  if (status === "fechado" || status === "justificado") {
+    return { success: false, error: "Não é possível registrar justificativa neste estado" };
   }
 
   var sheet = getRegistros();
-  sheet.getRange(r.row, COL.STATUS        + 1).setValue("justificado");
   sheet.getRange(r.row, COL.JUSTIFICATIVA + 1).setValue(body.justificativa);
+
+  // Se a semana já encerrou sem meta, marca como justificado
+  if (status === "incompleto") {
+    sheet.getRange(r.row, COL.STATUS + 1).setValue("justificado");
+    status = "justificado";
+  }
+  // Caso antecipado (aberto/ativo/pausado): salva o texto mas mantém status
 
   return {
     success:      true,
@@ -419,7 +428,7 @@ function justifySession(body) {
     meta_horas:   Number(r.data[COL.META_HORAS]),
     week_start:   r.data[COL.WEEK_START],
     week_end:     r.data[COL.WEEK_END],
-    status:       "justificado",
+    status:       status,
     user_id:      String(r.data[COL.USER_ID]),
   };
 }
@@ -529,7 +538,8 @@ function closeAllWeek(_body) {
       : 0;
     var novaAcum  = Number(data[i][COL.HORAS_ACUMULADAS]) + sessionH;
     var meta      = Number(data[i][COL.META_HORAS]);
-    var newStatus = novaAcum >= meta ? "fechado" : "incompleto";
+    var temJustif = !!(data[i][COL.JUSTIFICATIVA] && String(data[i][COL.JUSTIFICATIVA]).trim());
+    var newStatus = novaAcum >= meta ? "fechado" : (temJustif ? "justificado" : "incompleto");
 
     sheet.getRange(i + 1, COL.HORAS_ACUMULADAS    + 1).setValue(novaAcum);
     sheet.getRange(i + 1, COL.STATUS              + 1).setValue(newStatus);

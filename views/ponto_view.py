@@ -97,26 +97,34 @@ class JustificativaModal(discord.ui.Modal, title="📝 Justificativa de Ponto"):
             )
             return
 
-        owner = await _resolve_owner(interaction, result.get("user_id"))
-        embed = build_ponto_embed(
-            owner,
-            week_start=result.get("week_start", ""),
-            week_end=result.get("week_end", ""),
-            meta_horas=result.get("meta_horas", 5),
-            status="justificado",
-            horas_semana=result.get("horas_semana", 0),
-        )
+        new_status = result.get("status")
 
-        view = PontoView()
-        _disable_all(view)
-
-        pins = await interaction.channel.pins()
-        for pin in pins:
-            if pin.author.bot and pin.embeds:
-                await pin.edit(embed=embed, view=view)
-                break
-
-        await interaction.followup.send("✅ Justificativa registrada com sucesso!", ephemeral=True)
+        # Se a semana já estava incompleta, trava os botões e atualiza embed
+        if new_status == "justificado":
+            owner = await _resolve_owner(interaction, result.get("user_id"))
+            embed = build_ponto_embed(
+                owner,
+                week_start=result.get("week_start", ""),
+                week_end=result.get("week_end", ""),
+                meta_horas=result.get("meta_horas", 5),
+                status="justificado",
+                horas_semana=result.get("horas_semana", 0),
+            )
+            view = PontoView()
+            _disable_all(view)
+            pins = await interaction.channel.pins()
+            for pin in pins:
+                if pin.author.bot and pin.embeds:
+                    await pin.edit(embed=embed, view=view)
+                    break
+            await interaction.followup.send("✅ Justificativa registrada!", ephemeral=True)
+        else:
+            # Justificativa antecipada — semana ainda em aberto
+            await interaction.followup.send(
+                "✅ Justificativa antecipada registrada! "
+                "Você pode continuar registrando horas normalmente.",
+                ephemeral=True,
+            )
 
 
 async def _resolve_owner(
@@ -275,18 +283,20 @@ class PontoView(discord.ui.View):
 
         # Monta view com botões adequados ao novo estado
         closed_view = PontoView()
+        _ALWAYS_ON = {"ponto:iniciar", "ponto:justificativa"}
         if status == "aberto":
-            # Semana continua: mantém Iniciar habilitado para o próximo dia
+            # Semana continua: Iniciar e Justificativa habilitados
             for item in closed_view.children:
                 if hasattr(item, "custom_id"):
-                    item.disabled = item.custom_id != "ponto:iniciar"
+                    item.disabled = item.custom_id not in _ALWAYS_ON
+        elif status == "fechado":
+            # Meta atingida: tudo desabilitado
+            _disable_all(closed_view)
         else:
-            # Sábado: semana encerrada
+            # incompleto / justificado: só Justificativa
             for item in closed_view.children:
-                if hasattr(item, "custom_id") and item.custom_id == "ponto:justificativa":
-                    item.disabled = (status != "incompleto")
-                else:
-                    item.disabled = True
+                if hasattr(item, "custom_id"):
+                    item.disabled = item.custom_id != "ponto:justificativa"
 
         await self._refresh_embed(interaction, close, status, view=closed_view)
 
@@ -344,9 +354,9 @@ class PontoView(discord.ui.View):
             )
             return
 
-        if status_result.get("status") != "incompleto":
+        if status_result.get("status") in ("fechado", "justificado"):
             await interaction.response.send_message(
-                "❌ Justificativa só é necessária quando a semana encerra sem atingir a meta.",
+                "❌ Semana já encerrada — não é possível registrar justificativa.",
                 ephemeral=True,
             )
             return
