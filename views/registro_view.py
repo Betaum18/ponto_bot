@@ -115,6 +115,30 @@ class RegistroView(discord.ui.View):
             await thread.delete()
             return
 
+        # Sessão já existia — apaga a thread recém-criada e redireciona
+        if reg.get("already_exists"):
+            await thread.delete()
+            existing_id = int(reg["existing_thread_id"])
+            existing = guild.get_thread(existing_id)
+            if existing is None:
+                try:
+                    existing = await guild.fetch_channel(existing_id)
+                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                    existing = None
+
+            if existing:
+                await interaction.followup.send(
+                    f"Você já tem uma thread de ponto aberta esta semana!\n"
+                    f"➡️ {existing.mention}\n{existing.jump_url}",
+                    ephemeral=True,
+                )
+            else:
+                await interaction.followup.send(
+                    "Você já tem uma sessão aberta esta semana, mas não foi possível localizar a thread.",
+                    ephemeral=True,
+                )
+            return
+
         meta_horas = reg.get("meta_horas", 5)
 
         # Cabeçalho fixado na thread

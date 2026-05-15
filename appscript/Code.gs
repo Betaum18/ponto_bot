@@ -205,16 +205,18 @@ function registerSession(body) {
   var week_start = body.week_start;
   var week_end   = body.week_end;
 
-  var existing = findRegistroByThreadId(thread_id);
-  if (existing) {
-    var d = existing.data;
+  // Se já existe sessão para este usuário nesta semana, retorna o thread existente
+  var weekSession = findRegistroByWeek(user_id, week_start);
+  if (weekSession) {
+    var d = weekSession.data;
     return {
-      success:        true,
-      meta_horas:     Number(d[COL.META_HORAS]),
-      status:         d[COL.STATUS],
-      week_start:     d[COL.WEEK_START],
-      week_end:       d[COL.WEEK_END],
-      already_exists: true,
+      success:            true,
+      already_exists:     true,
+      existing_thread_id: String(d[COL.THREAD_ID]),
+      meta_horas:         Number(d[COL.META_HORAS]),
+      status:             d[COL.STATUS],
+      week_start:         d[COL.WEEK_START],
+      week_end:           d[COL.WEEK_END],
     };
   }
 
