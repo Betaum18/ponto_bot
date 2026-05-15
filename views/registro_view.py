@@ -46,7 +46,8 @@ class RegistroView(discord.ui.View):
             existing = guild.get_thread(int(check["thread_id"]))
             if existing:
                 await interaction.followup.send(
-                    f"Você já tem uma thread de ponto aberta esta semana! Acesse: {existing.mention}",
+                    f"Você já tem uma thread de ponto aberta esta semana!\n"
+                    f"➡️ {existing.mention}\n{existing.jump_url}",
                     ephemeral=True,
                 )
                 return
@@ -126,6 +127,7 @@ class RegistroView(discord.ui.View):
         await header.pin()
 
         await interaction.followup.send(
-            f"✅ Thread criada! Acesse: {thread.mention}",
+            f"✅ Thread de ponto criada!\n"
+            f"➡️ {thread.mention}\n{thread.jump_url}",
             ephemeral=True,
         )
