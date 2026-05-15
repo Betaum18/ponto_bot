@@ -530,7 +530,7 @@ function closeAllWeek(_body) {
 
   for (var i = 1; i < data.length; i++) {
     var status    = data[i][COL.STATUS];
-    var weekStart = String(data[i][COL.WEEK_START]);
+    var weekStart = normDate(data[i][COL.WEEK_START]);
 
     if (weekStart !== bounds.start) continue;
     if (status !== "ativo" && status !== "pausado" && status !== "aberto") continue;
