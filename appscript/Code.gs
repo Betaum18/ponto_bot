@@ -168,7 +168,7 @@ function calcHours(inicio, fim, pausasJson) {
     });
   } catch (_) {}
 
-  return Math.max(0, total / 3_600_000);
+  return Math.max(0, total / 3600000);
 }
 
 // ── Action handlers ───────────────────────────────────────────────────────────
