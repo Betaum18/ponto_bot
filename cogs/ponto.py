@@ -183,11 +183,26 @@ class PontoCog(commands.Cog):
 
         lines = []
         for u in users:
-            icon = _STATUS_ICONS.get(u["today_status"], "❓")
+            icon      = _STATUS_ICONS.get(u["today_status"], "❓")
+            horas     = u["today_horas"]
+            meta      = u["meta_horas"]
+            status    = u["today_status"]
+            remaining = max(0.0, meta - horas)
+
+            if status in ("fechado", "justificado"):
+                extra = "✅ Meta atingida" if horas >= meta else f"Faltaram {fmt_horas(remaining)}"
+            elif status == "incompleto":
+                extra = f"⚠️ Faltaram {fmt_horas(remaining)}"
+            elif status == "ausente":
+                extra = f"Faltam {fmt_horas(remaining)} para a meta"
+            elif remaining <= 0:
+                extra = "✅ Meta atingida"
+            else:
+                extra = f"Faltam **{fmt_horas(remaining)}** para a meta"
+
             lines.append(
-                f"{icon} **{u['user_name']}** — "
-                f"{fmt_horas(u['today_horas'])} / {fmt_horas(u['meta_horas'])} "
-                f"({u['today_status']})"
+                f"{icon} **{u['user_name']}**\n"
+                f"  ⏱️ {fmt_horas(horas)} trabalhadas / 🎯 Meta: {fmt_horas(meta)} — {extra}"
             )
 
         tz = pytz.timezone(TIMEZONE)
