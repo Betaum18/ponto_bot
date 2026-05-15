@@ -1,11 +1,9 @@
 // ============================================================
 //  Bot de Ponto — Google Apps Script Backend
 //  Cole todo este arquivo em um novo projeto Apps Script,
-//  configure a constante SECRET_KEY e publique como Web App
+//  publique como Web App
 //  (Executar como: Eu mesmo | Quem tem acesso: Qualquer pessoa)
 // ============================================================
-
-const SECRET_KEY = "sua_chave_secreta_aqui"; // deve coincidir com APPSCRIPT_SECRET no .env
 
 // Índices das colunas da aba Registros (base 0)
 const COL = {
@@ -27,10 +25,6 @@ const COL = {
 function doPost(e) {
   try {
     const body = JSON.parse(e.postData.contents);
-
-    if (body.secret !== SECRET_KEY) {
-      return jsonResp({ success: false, error: "Não autorizado" });
-    }
 
     const handlers = {
       register_session: registerSession,

@@ -4,14 +4,13 @@ import os
 import aiohttp
 
 APPSCRIPT_URL: str = os.getenv("APPSCRIPT_URL", "")
-SECRET_KEY: str = os.getenv("APPSCRIPT_SECRET", "")
 
 
 async def call_api(action: str, **kwargs) -> dict:
     if not APPSCRIPT_URL:
         return {"success": False, "error": "APPSCRIPT_URL não configurada"}
 
-    payload = {"action": action, "secret": SECRET_KEY, **kwargs}
+    payload = {"action": action, **kwargs}
 
     try:
         async with aiohttp.ClientSession() as session:
