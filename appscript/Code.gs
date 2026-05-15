@@ -123,12 +123,36 @@ function getWeekBounds() {
   };
 }
 
-// Normaliza valores de data que o Sheets pode converter automaticamente
+// Normaliza valores de data que o Sheets pode converter automaticamente.
+// Aceita Date objects, strings ISO (ex: "2026-05-10T03:00:00.000Z") e strings "YYYY-MM-DD".
 function normDate(val) {
+  if (!val && val !== 0) return "";
   if (val instanceof Date) {
     return Utilities.formatDate(val, TZ, "yyyy-MM-dd");
   }
-  return String(val);
+  var s = String(val);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  try {
+    var d = new Date(s);
+    if (!isNaN(d.getTime())) {
+      return Utilities.formatDate(d, TZ, "yyyy-MM-dd");
+    }
+  } catch (_) {}
+  return s;
+}
+
+// Normaliza timestamps de sessão para ISO 8601 (string). Retorna null se vazio.
+function normIso(val) {
+  if (!val) return null;
+  if (val instanceof Date) return val.toISOString();
+  var s = String(val);
+  // já é ISO
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s;
+  try {
+    var d = new Date(s);
+    if (!isNaN(d.getTime())) return d.toISOString();
+  } catch (_) {}
+  return s;
 }
 
 // ── Lookup helpers ────────────────────────────────────────────────────────────
@@ -269,7 +293,7 @@ function getStatus(body) {
     horas_semana:   horasSemana,
     meta_horas:     Number(d[COL.META_HORAS]),
     status:         status,
-    session_inicio: d[COL.SESSION_INICIO] || null,
+    session_inicio: normIso(d[COL.SESSION_INICIO]),
     justificativa:  d[COL.JUSTIFICATIVA]  || null,
   };
 }
@@ -321,7 +345,7 @@ function pauseSession(body) {
 
   return {
     success:        true,
-    session_inicio: r.data[COL.SESSION_INICIO],
+    session_inicio: normIso(r.data[COL.SESSION_INICIO]),
     horas_semana:   horasSemana,
     meta_horas:     Number(r.data[COL.META_HORAS]),
     week_start:     normDate(r.data[COL.WEEK_START]),
@@ -351,7 +375,7 @@ function resumeSession(body) {
 
   return {
     success:        true,
-    session_inicio: r.data[COL.SESSION_INICIO],
+    session_inicio: normIso(r.data[COL.SESSION_INICIO]),
     horas_semana:   horasSemana,
     meta_horas:     Number(r.data[COL.META_HORAS]),
     week_start:     normDate(r.data[COL.WEEK_START]),
