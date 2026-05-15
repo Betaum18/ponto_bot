@@ -126,6 +126,13 @@ class PontoCog(commands.Cog):
         except discord.HTTPException:
             pass
 
+        # Exclui a thread após notificação (mantém aberta só se incompleto, aguardando justificativa)
+        if status in ("fechado", "justificado"):
+            try:
+                await thread.delete()
+            except discord.HTTPException:
+                pass
+
     ponto = app_commands.Group(name="ponto", description="Controle de ponto")
     admin = app_commands.Group(
         name="admin",

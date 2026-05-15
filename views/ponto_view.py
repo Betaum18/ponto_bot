@@ -118,6 +118,10 @@ class JustificativaModal(discord.ui.Modal, title="📝 Justificativa de Ponto"):
                     await pin.edit(embed=embed, view=view)
                     break
             await interaction.followup.send("✅ Justificativa registrada!", ephemeral=True)
+            try:
+                await interaction.channel.delete()
+            except discord.HTTPException:
+                pass
         else:
             # Justificativa antecipada — semana ainda em aberto
             await interaction.followup.send(
@@ -319,6 +323,19 @@ class PontoView(discord.ui.View):
                 f"Meta de **{fmt_horas(meta)}** atingida!",
                 ephemeral=False,
             )
+            try:
+                await interaction.channel.delete()
+            except discord.HTTPException:
+                pass
+        elif status == "justificado":
+            await interaction.followup.send(
+                f"✅ Semana encerrada com justificativa. Total: **{fmt_horas(horas_semana)}**.",
+                ephemeral=False,
+            )
+            try:
+                await interaction.channel.delete()
+            except discord.HTTPException:
+                pass
         else:
             remaining = max(0.0, meta - horas_semana)
             msg = (
