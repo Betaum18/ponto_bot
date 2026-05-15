@@ -10,6 +10,15 @@ from views.ponto_view import PontoView, build_ponto_embed
 TIMEZONE: str = os.getenv("TIMEZONE", "America/Sao_Paulo")
 
 
+def get_week_bounds(now: datetime.datetime) -> tuple[str, str]:
+    # Python weekday(): Monday=0 … Sunday=6
+    # Queremos Sunday=0, então: days_since_sunday = (weekday + 1) % 7
+    days_since_sunday = (now.weekday() + 1) % 7
+    sunday   = now - datetime.timedelta(days=days_since_sunday)
+    saturday = sunday + datetime.timedelta(days=6)
+    return sunday.strftime("%Y-%m-%d"), saturday.strftime("%Y-%m-%d")
+
+
 class RegistroView(discord.ui.View):
     def __init__(self) -> None:
         super().__init__(timeout=None)
@@ -24,25 +33,32 @@ class RegistroView(discord.ui.View):
     ) -> None:
         await interaction.response.defer(ephemeral=True)
 
-        user = interaction.user
+        user  = interaction.user
         guild = interaction.guild
-        tz = pytz.timezone(TIMEZONE)
-        now = datetime.datetime.now(tz)
-        today = now.strftime("%Y-%m-%d")
+        tz    = pytz.timezone(TIMEZONE)
+        now   = datetime.datetime.now(tz)
 
-        # Redirect if user already has an open session today
-        check = await call_api("get_active_thread", user_id=str(user.id), date=today)
+        week_start, week_end = get_week_bounds(now)
+
+        # Redireciona se já existe thread aberta esta semana
+        check = await call_api("get_active_thread", user_id=str(user.id), week_start=week_start)
         if check.get("success") and check.get("thread_id"):
             existing = guild.get_thread(int(check["thread_id"]))
             if existing:
                 await interaction.followup.send(
-                    f"Você já tem um ponto aberto hoje! Acesse: {existing.mention}",
+                    f"Você já tem uma thread de ponto aberta esta semana! Acesse: {existing.mention}",
                     ephemeral=True,
                 )
                 return
 
-        # Create private thread
-        thread_name = f"Ponto — {user.display_name} — {now.strftime('%d/%m/%Y')}"
+        # Nome da thread com o intervalo da semana
+        start_dt = datetime.datetime.strptime(week_start, "%Y-%m-%d")
+        end_dt   = datetime.datetime.strptime(week_end,   "%Y-%m-%d")
+        thread_name = (
+            f"Ponto — {user.display_name} — "
+            f"{start_dt.strftime('%d/%m')} a {end_dt.strftime('%d/%m')}"
+        )
+
         try:
             thread = await interaction.channel.create_thread(
                 name=thread_name,
@@ -62,13 +78,14 @@ class RegistroView(discord.ui.View):
 
         await thread.add_user(user)
 
-        # Register session — Apps Script creates the row and returns meta
+        # Registra sessão semanal no Sheets
         reg = await call_api(
             "register_session",
             thread_id=str(thread.id),
             user_id=str(user.id),
             user_name=user.display_name,
-            date=today,
+            week_start=week_start,
+            week_end=week_end,
         )
 
         if not reg.get("success"):
@@ -79,13 +96,18 @@ class RegistroView(discord.ui.View):
             await thread.delete()
             return
 
-        meta_horas = reg.get("meta_horas", 8)
+        meta_horas = reg.get("meta_horas", 5)
 
-        # Pin the control header inside the thread
-        embed = build_ponto_embed(user, now, meta_horas)
-        view = PontoView()
+        # Cabeçalho fixado na thread
+        embed = build_ponto_embed(
+            user,
+            week_start=week_start,
+            week_end=week_end,
+            meta_horas=meta_horas,
+        )
+        view   = PontoView()
         header = await thread.send(
-            content=f"**Controle de Ponto** | {user.mention} | {now.strftime('%d/%m/%Y')}",
+            content=f"**Controle de Ponto Semanal** | {user.mention}",
             embed=embed,
             view=view,
         )

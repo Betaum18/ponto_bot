@@ -14,7 +14,7 @@ TIMEZONE: str = os.getenv("TIMEZONE", "America/Sao_Paulo")
 ADM_ROLE_ID: int = int(os.getenv("ADM_ROLE_ID", "0"))
 
 _STATUS_ICONS = {
-    "pendente":    "⚪",
+    "aberto":      "⚪",
     "ativo":       "🟢",
     "pausado":     "🟡",
     "fechado":     "✅",
@@ -59,12 +59,13 @@ class PontoCog(commands.Cog):
             title="📋 Sistema de Controle de Ponto",
             description=(
                 "Bem-vindo ao sistema de ponto!\n\n"
-                "Clique em **Registro** para abrir sua thread pessoal e controlar suas horas.\n\n"
+                "Clique em **Registro** para abrir sua thread semanal de ponto.\n"
+                "A semana vai de **domingo a sábado** com meta de **5 horas semanais**.\n\n"
                 "**Como funciona:**\n"
-                "▶️ **Iniciar Ponto** — Começa o contador\n"
+                "▶️ **Iniciar Ponto** — Começa a sessão do dia\n"
                 "⏸️ **Pausar / Retomar** — Pausa ou retoma\n"
-                "⏹️ **Fechar Ponto** — Encerra o registro do dia\n"
-                "📝 **Justificativa** — Necessária se não atingir a meta"
+                "⏹️ **Fechar Ponto** — Encerra a sessão do dia\n"
+                "📝 **Justificativa** — Necessária se a semana encerrar sem atingir a meta"
             ),
             color=discord.Color.blurple(),
         )
@@ -101,7 +102,7 @@ class PontoCog(commands.Cog):
 
         tz = pytz.timezone(TIMEZONE)
         embed = discord.Embed(
-            title="👥 Usuários — Status de Hoje",
+            title="👥 Usuários — Status da Semana",
             description="\n".join(lines),
             color=discord.Color.blurple(),
         )
@@ -165,8 +166,8 @@ class PontoCog(commands.Cog):
         for r in records:
             icon = _STATUS_ICONS.get(r["status"], "❓")
             lines.append(
-                f"{icon} `{r['date']}` — **{fmt_horas(r['horas_trabalhadas'])}** "
-                f"/ {fmt_horas(r['meta_horas'])}"
+                f"{icon} `{r['week_start']} → {r['week_end']}` — "
+                f"**{fmt_horas(r['horas_semana'])}** / {fmt_horas(r['meta_horas'])}"
             )
             if r.get("justificativa"):
                 short = r["justificativa"][:80]

@@ -10,12 +10,12 @@ TIMEZONE: str = os.getenv("TIMEZONE", "America/Sao_Paulo")
 ADM_ROLE_ID: int = int(os.getenv("ADM_ROLE_ID", "0"))
 
 _STATUS_MAP = {
-    "pendente":    ("⚪ Aguardando Início",                    discord.Color.light_grey()),
-    "ativo":       ("🟢 Ativo",                                discord.Color.green()),
-    "pausado":     ("🟡 Pausado",                              discord.Color.yellow()),
-    "fechado":     ("✅ Fechado",                               discord.Color.blue()),
-    "incompleto":  ("🔴 Incompleto — Justificativa Necessária", discord.Color.red()),
-    "justificado": ("📝 Justificado",                          discord.Color.purple()),
+    "aberto":      ("⚪ Aguardando Início",                             discord.Color.light_grey()),
+    "ativo":       ("🟢 Ativo",                                         discord.Color.green()),
+    "pausado":     ("🟡 Pausado",                                       discord.Color.yellow()),
+    "fechado":     ("✅ Semana Concluída",                               discord.Color.blue()),
+    "incompleto":  ("🔴 Meta Não Atingida — Justificativa Necessária",  discord.Color.red()),
+    "justificado": ("📝 Justificado",                                   discord.Color.purple()),
 }
 
 
@@ -23,6 +23,15 @@ def fmt_horas(horas: float) -> str:
     h = int(horas)
     m = int(round((horas - h) * 60))
     return f"{h}h {m:02d}min"
+
+
+def _fmt_week(week_start: str, week_end: str) -> str:
+    try:
+        s = datetime.datetime.strptime(week_start, "%Y-%m-%d")
+        e = datetime.datetime.strptime(week_end,   "%Y-%m-%d")
+        return f"{s.strftime('%d/%m')} (Dom) — {e.strftime('%d/%m')} (Sáb)"
+    except Exception:
+        return f"{week_start} — {week_end}"
 
 
 def _parse_inicio(inicio_iso: str | None) -> str | None:
@@ -37,26 +46,26 @@ def _parse_inicio(inicio_iso: str | None) -> str | None:
 
 def build_ponto_embed(
     user: discord.Member | discord.User,
-    date: datetime.datetime,
+    week_start: str,
+    week_end: str,
     meta_horas: float,
-    status: str = "pendente",
-    inicio: str | None = None,
-    horas_trabalhadas: float = 0.0,
+    status: str = "aberto",
+    session_inicio: str | None = None,
+    horas_semana: float = 0.0,
 ) -> discord.Embed:
-    label, color = _STATUS_MAP.get(status, _STATUS_MAP["pendente"])
+    label, color = _STATUS_MAP.get(status, _STATUS_MAP["aberto"])
 
-    embed = discord.Embed(title="🕐 Controle de Ponto", color=color)
+    embed = discord.Embed(title="🕐 Controle de Ponto Semanal", color=color)
     embed.set_author(name=user.display_name, icon_url=user.display_avatar.url)
 
-    embed.add_field(name="📅 Data",             value=date.strftime("%d/%m/%Y"),  inline=True)
-    embed.add_field(name="📊 Status",           value=label,                      inline=True)
-    embed.add_field(name="​",              value="​",                   inline=True)
-    embed.add_field(name="⏱️ Tempo Trabalhado", value=fmt_horas(horas_trabalhadas), inline=True)
-    embed.add_field(name="🎯 Meta",             value=fmt_horas(meta_horas),       inline=True)
+    embed.add_field(name="📅 Semana",           value=_fmt_week(week_start, week_end), inline=False)
+    embed.add_field(name="📊 Status",           value=label,                           inline=True)
+    embed.add_field(name="⏱️ Horas na Semana",  value=fmt_horas(horas_semana),         inline=True)
+    embed.add_field(name="🎯 Meta Semanal",     value=fmt_horas(meta_horas),           inline=True)
 
-    inicio_display = _parse_inicio(inicio)
+    inicio_display = _parse_inicio(session_inicio)
     if inicio_display:
-        embed.add_field(name="🕐 Início", value=inicio_display, inline=True)
+        embed.add_field(name="🕐 Sessão Atual", value=f"Desde {inicio_display}", inline=True)
 
     embed.set_footer(text="Use os botões abaixo para controlar seu ponto")
     return embed
@@ -66,7 +75,7 @@ class JustificativaModal(discord.ui.Modal, title="📝 Justificativa de Ponto"):
     texto = discord.ui.TextInput(
         label="Justificativa",
         style=discord.TextStyle.paragraph,
-        placeholder="Descreva o motivo pelo qual não atingiu a meta de horas hoje...",
+        placeholder="Descreva o motivo pelo qual não atingiu a meta de 5h esta semana...",
         min_length=10,
         max_length=1000,
     )
@@ -88,15 +97,14 @@ class JustificativaModal(discord.ui.Modal, title="📝 Justificativa de Ponto"):
             )
             return
 
-        tz = pytz.timezone(TIMEZONE)
-        now = datetime.datetime.now(tz)
         owner = await _resolve_owner(interaction, result.get("user_id"))
         embed = build_ponto_embed(
-            owner, now,
-            result.get("meta_horas", 8),
+            owner,
+            week_start=result.get("week_start", ""),
+            week_end=result.get("week_end", ""),
+            meta_horas=result.get("meta_horas", 5),
             status="justificado",
-            inicio=result.get("inicio"),
-            horas_trabalhadas=result.get("horas_trabalhadas", 0),
+            horas_semana=result.get("horas_semana", 0),
         )
 
         view = PontoView()
@@ -165,15 +173,15 @@ class PontoView(discord.ui.View):
         status: str,
         view: discord.ui.View | None = None,
     ) -> None:
-        tz = pytz.timezone(TIMEZONE)
-        now = datetime.datetime.now(tz)
         owner = await _resolve_owner(interaction, result.get("user_id"))
         embed = build_ponto_embed(
-            owner, now,
-            result.get("meta_horas", 8),
+            owner,
+            week_start=result.get("week_start", ""),
+            week_end=result.get("week_end", ""),
+            meta_horas=result.get("meta_horas", 5),
             status=status,
-            inicio=result.get("inicio"),
-            horas_trabalhadas=result.get("horas_trabalhadas", 0.0),
+            session_inicio=result.get("session_inicio"),
+            horas_semana=result.get("horas_semana", 0.0),
         )
         await interaction.message.edit(embed=embed, view=view or self)
 
@@ -193,8 +201,8 @@ class PontoView(discord.ui.View):
         if result is None:
             return
 
-        if result.get("status") != "pendente":
-            await interaction.followup.send("❌ O ponto já foi iniciado hoje.", ephemeral=True)
+        if result.get("status") != "aberto":
+            await interaction.followup.send("❌ Não é possível iniciar o ponto agora.", ephemeral=True)
             return
 
         start = await call_api("start", thread_id=str(interaction.channel.id), user_id=str(interaction.user.id))
@@ -251,7 +259,7 @@ class PontoView(discord.ui.View):
             return
 
         if result.get("status") not in ("ativo", "pausado"):
-            await interaction.followup.send("❌ O ponto não está aberto.", ephemeral=True)
+            await interaction.followup.send("❌ O ponto não está ativo.", ephemeral=True)
             return
 
         close = await call_api("close", thread_id=str(interaction.channel.id), user_id=str(interaction.user.id))
@@ -259,35 +267,55 @@ class PontoView(discord.ui.View):
             await interaction.followup.send(f"❌ {close.get('error', 'Erro ao fechar.')}", ephemeral=True)
             return
 
-        horas = close.get("horas_trabalhadas", 0.0)
-        meta = close.get("meta_horas", 8.0)
-        atingiu = horas >= meta
-        status = "fechado" if atingiu else "incompleto"
+        horas_semana = close.get("horas_semana", 0.0)
+        meta         = close.get("meta_horas", 5.0)
+        status       = close.get("status")
+        is_saturday  = close.get("is_saturday", False)
+        week_fmt     = _fmt_week(close.get("week_start", ""), close.get("week_end", ""))
 
-        # Disable all buttons; keep justificativa enabled only when needed
+        # Monta view com botões adequados ao novo estado
         closed_view = PontoView()
-        for item in closed_view.children:
-            if hasattr(item, "custom_id") and item.custom_id == "ponto:justificativa":
-                item.disabled = atingiu  # enabled only if didn't meet goal
-            else:
-                item.disabled = True
+        if status == "aberto":
+            # Semana continua: mantém Iniciar habilitado para o próximo dia
+            for item in closed_view.children:
+                if hasattr(item, "custom_id"):
+                    item.disabled = item.custom_id != "ponto:iniciar"
+        else:
+            # Sábado: semana encerrada
+            for item in closed_view.children:
+                if hasattr(item, "custom_id") and item.custom_id == "ponto:justificativa":
+                    item.disabled = (status != "incompleto")
+                else:
+                    item.disabled = True
 
         await self._refresh_embed(interaction, close, status, view=closed_view)
 
-        if atingiu:
+        if status == "incompleto":
+            diff = meta - horas_semana
             await interaction.followup.send(
-                f"✅ Ponto fechado! Total: **{fmt_horas(horas)}**. Meta atingida! 🎉",
-                ephemeral=False,
-            )
-        else:
-            diff = meta - horas
-            await interaction.followup.send(
-                f"⚠️ {interaction.user.mention} você não atingiu a meta diária!\n"
-                f"> Trabalhado: **{fmt_horas(horas)}** | Meta: **{fmt_horas(meta)}** | "
+                f"⚠️ {interaction.user.mention} a meta semanal não foi atingida!\n"
+                f"> Semana: **{week_fmt}**\n"
+                f"> Trabalhado: **{fmt_horas(horas_semana)}** | Meta: **{fmt_horas(meta)}** | "
                 f"Faltaram: **{fmt_horas(diff)}**\n"
                 f"Por favor, clique em **📝 Justificativa** para registrar o motivo.",
                 ephemeral=False,
             )
+        elif status == "fechado":
+            await interaction.followup.send(
+                f"🎉 Semana encerrada! Total: **{fmt_horas(horas_semana)}**. "
+                f"Meta de **{fmt_horas(meta)}** atingida!",
+                ephemeral=False,
+            )
+        else:
+            remaining = max(0.0, meta - horas_semana)
+            msg = (
+                f"✅ Sessão encerrada! Total da semana: **{fmt_horas(horas_semana)}** / **{fmt_horas(meta)}**"
+            )
+            if remaining > 0:
+                msg += f" — Faltam **{fmt_horas(remaining)}** para a meta."
+            else:
+                msg += " — Meta já atingida! 🎉"
+            await interaction.followup.send(msg, ephemeral=False)
 
     @discord.ui.button(
         label="📝 Justificativa",
@@ -318,7 +346,7 @@ class PontoView(discord.ui.View):
 
         if status_result.get("status") != "incompleto":
             await interaction.response.send_message(
-                "❌ Justificativa só é necessária quando o ponto é fechado sem atingir a meta.",
+                "❌ Justificativa só é necessária quando a semana encerra sem atingir a meta.",
                 ephemeral=True,
             )
             return
