@@ -210,7 +210,10 @@ class PontoView(discord.ui.View):
             return
 
         if result.get("status") != "aberto":
-            await interaction.followup.send("❌ Não é possível iniciar o ponto agora.", ephemeral=True)
+            await interaction.followup.send(
+                f"❌ Não é possível iniciar o ponto agora. (status: `{result.get('status')}`)",
+                ephemeral=True,
+            )
             return
 
         start = await call_api("start", thread_id=str(interaction.channel.id), user_id=str(interaction.user.id))
