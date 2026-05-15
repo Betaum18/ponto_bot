@@ -123,6 +123,14 @@ function getWeekBounds() {
   };
 }
 
+// Normaliza valores de data que o Sheets pode converter automaticamente
+function normDate(val) {
+  if (val instanceof Date) {
+    return Utilities.formatDate(val, TZ, "yyyy-MM-dd");
+  }
+  return String(val);
+}
+
 // ── Lookup helpers ────────────────────────────────────────────────────────────
 
 function findRegistroByThreadId(threadId) {
@@ -141,8 +149,8 @@ function findRegistroByWeek(userId, weekStart) {
   const data  = sheet.getDataRange().getValues();
   for (var i = 1; i < data.length; i++) {
     if (
-      String(data[i][COL.USER_ID])    === String(userId) &&
-      String(data[i][COL.WEEK_START]) === String(weekStart)
+      String(data[i][COL.USER_ID]) === String(userId) &&
+      normDate(data[i][COL.WEEK_START]) === String(weekStart)
     ) {
       return { row: i + 1, data: data[i] };
     }
@@ -215,8 +223,8 @@ function registerSession(body) {
       existing_thread_id: String(d[COL.THREAD_ID]),
       meta_horas:         Number(d[COL.META_HORAS]),
       status:             d[COL.STATUS],
-      week_start:         d[COL.WEEK_START],
-      week_end:           d[COL.WEEK_END],
+      week_start:         normDate(d[COL.WEEK_START]),
+      week_end:           normDate(d[COL.WEEK_END]),
     };
   }
 
@@ -256,8 +264,8 @@ function getStatus(body) {
     thread_id:      String(d[COL.THREAD_ID]),
     user_id:        String(d[COL.USER_ID]),
     user_name:      d[COL.USER_NAME],
-    week_start:     d[COL.WEEK_START],
-    week_end:       d[COL.WEEK_END],
+    week_start:     normDate(d[COL.WEEK_START]),
+    week_end:       normDate(d[COL.WEEK_END]),
     horas_semana:   horasSemana,
     meta_horas:     Number(d[COL.META_HORAS]),
     status:         status,
@@ -288,8 +296,8 @@ function startSession(body) {
     session_inicio: now,
     horas_semana:   Number(r.data[COL.HORAS_ACUMULADAS]),
     meta_horas:     Number(r.data[COL.META_HORAS]),
-    week_start:     r.data[COL.WEEK_START],
-    week_end:       r.data[COL.WEEK_END],
+    week_start:     normDate(r.data[COL.WEEK_START]),
+    week_end:       normDate(r.data[COL.WEEK_END]),
     status:         "ativo",
     user_id:        String(r.data[COL.USER_ID]),
   };
@@ -316,8 +324,8 @@ function pauseSession(body) {
     session_inicio: r.data[COL.SESSION_INICIO],
     horas_semana:   horasSemana,
     meta_horas:     Number(r.data[COL.META_HORAS]),
-    week_start:     r.data[COL.WEEK_START],
-    week_end:       r.data[COL.WEEK_END],
+    week_start:     normDate(r.data[COL.WEEK_START]),
+    week_end:       normDate(r.data[COL.WEEK_END]),
     status:         "pausado",
     user_id:        String(r.data[COL.USER_ID]),
   };
@@ -346,8 +354,8 @@ function resumeSession(body) {
     session_inicio: r.data[COL.SESSION_INICIO],
     horas_semana:   horasSemana,
     meta_horas:     Number(r.data[COL.META_HORAS]),
-    week_start:     r.data[COL.WEEK_START],
-    week_end:       r.data[COL.WEEK_END],
+    week_start:     normDate(r.data[COL.WEEK_START]),
+    week_end:       normDate(r.data[COL.WEEK_END]),
     status:         "ativo",
     user_id:        String(r.data[COL.USER_ID]),
   };
@@ -397,8 +405,8 @@ function closeSession(body) {
     success:      true,
     horas_semana: novaAcum,
     meta_horas:   meta,
-    week_start:   r.data[COL.WEEK_START],
-    week_end:     r.data[COL.WEEK_END],
+    week_start:   normDate(r.data[COL.WEEK_START]),
+    week_end:     normDate(r.data[COL.WEEK_END]),
     status:       newStatus,
     is_saturday:  bounds.isSaturday,
     user_id:      String(r.data[COL.USER_ID]),
@@ -428,8 +436,8 @@ function justifySession(body) {
     success:      true,
     horas_semana: Number(r.data[COL.HORAS_ACUMULADAS]),
     meta_horas:   Number(r.data[COL.META_HORAS]),
-    week_start:   r.data[COL.WEEK_START],
-    week_end:     r.data[COL.WEEK_END],
+    week_start:   normDate(r.data[COL.WEEK_START]),
+    week_end:     normDate(r.data[COL.WEEK_END]),
     status:       status,
     user_id:      String(r.data[COL.USER_ID]),
   };
@@ -449,8 +457,8 @@ function getAllUsers(_body) {
     var weekRecord = null;
     for (var j = 1; j < registrosData.length; j++) {
       if (
-        String(registrosData[j][COL.USER_ID])    === userId &&
-        String(registrosData[j][COL.WEEK_START]) === weekStart
+        String(registrosData[j][COL.USER_ID])      === userId &&
+        normDate(registrosData[j][COL.WEEK_START]) === weekStart
       ) {
         weekRecord = registrosData[j];
         break;
@@ -501,8 +509,8 @@ function getRecords(body) {
     if (String(data[i][COL.USER_ID]) !== String(body.user_id)) continue;
     records.push({
       thread_id:    String(data[i][COL.THREAD_ID]),
-      week_start:   data[i][COL.WEEK_START],
-      week_end:     data[i][COL.WEEK_END],
+      week_start:   normDate(data[i][COL.WEEK_START]),
+      week_end:     normDate(data[i][COL.WEEK_END]),
       horas_semana: Number(data[i][COL.HORAS_ACUMULADAS]),
       meta_horas:   Number(data[i][COL.META_HORAS]),
       status:       data[i][COL.STATUS],
@@ -553,8 +561,8 @@ function closeAllWeek(_body) {
       user_id:      String(data[i][COL.USER_ID]),
       horas_semana: novaAcum,
       meta_horas:   meta,
-      week_start:   data[i][COL.WEEK_START],
-      week_end:     data[i][COL.WEEK_END],
+      week_start:   normDate(data[i][COL.WEEK_START]),
+      week_end:     normDate(data[i][COL.WEEK_END]),
       status:       newStatus,
     });
   }
