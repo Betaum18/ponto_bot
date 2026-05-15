@@ -78,6 +78,18 @@ class RegistroView(discord.ui.View):
 
         await thread.add_user(user)
 
+        # Adiciona todos os membros com cargo ADM à thread
+        adm_role_id = int(os.getenv("ADM_ROLE_ID", "0"))
+        if adm_role_id:
+            adm_role = guild.get_role(adm_role_id)
+            if adm_role:
+                for member in adm_role.members:
+                    if member.id != user.id:
+                        try:
+                            await thread.add_user(member)
+                        except discord.HTTPException:
+                            pass
+
         # Registra sessão semanal no Sheets
         reg = await call_api(
             "register_session",
