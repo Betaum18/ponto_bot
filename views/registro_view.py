@@ -44,7 +44,13 @@ class RegistroView(discord.ui.View):
         check = await call_api("get_active_thread", user_id=str(user.id), week_start=week_start)
         if check.get("success") and check.get("thread_id"):
             existing = guild.get_thread(int(check["thread_id"]))
-            if existing:
+            if existing is None:
+                try:
+                    existing = await guild.fetch_channel(int(check["thread_id"]))
+                except (discord.NotFound, discord.Forbidden):
+                    existing = None
+
+            if existing is not None:
                 await interaction.followup.send(
                     f"Você já tem uma thread de ponto aberta esta semana!\n"
                     f"➡️ {existing.mention}\n{existing.jump_url}",
