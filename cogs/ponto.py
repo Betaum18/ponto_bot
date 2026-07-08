@@ -147,19 +147,12 @@ class PontoCog(commands.Cog):
 
     @app_commands.command(
         name="ponto",
-        description="Publica o painel de controle de ponto nesta thread (criada manualmente)",
+        description="Publica o painel de controle de ponto neste canal",
     )
     async def ponto(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
 
         channel = interaction.channel
-        if not isinstance(channel, discord.Thread):
-            await interaction.followup.send(
-                "❌ Use este comando dentro da sua thread de ponto (criada manualmente).",
-                ephemeral=True,
-            )
-            return
-
         user  = interaction.user
         guild = interaction.guild
         tz    = pytz.timezone(TIMEZONE)
@@ -186,12 +179,12 @@ class PontoCog(commands.Cog):
             existing_thread_id = int(reg["existing_thread_id"])
             if existing_thread_id == channel.id:
                 await interaction.followup.send(
-                    "✅ O painel de ponto já está publicado nesta thread.",
+                    "✅ O painel de ponto já está publicado neste canal.",
                     ephemeral=True,
                 )
                 return
 
-            existing = guild.get_thread(existing_thread_id)
+            existing = guild.get_channel_or_thread(existing_thread_id)
             if existing is None:
                 try:
                     existing = await guild.fetch_channel(existing_thread_id)
@@ -200,19 +193,19 @@ class PontoCog(commands.Cog):
 
             if existing:
                 await interaction.followup.send(
-                    f"Você já tem uma thread de ponto aberta esta semana!\n"
+                    f"Você já tem um canal de ponto aberto esta semana!\n"
                     f"➡️ {existing.mention}\n{existing.jump_url}",
                     ephemeral=True,
                 )
             else:
                 await interaction.followup.send(
-                    "Você já tem uma sessão aberta esta semana, mas não foi possível localizar a thread.",
+                    "Você já tem uma sessão aberta esta semana, mas não foi possível localizar o canal.",
                     ephemeral=True,
                 )
             return
 
-        # Adiciona membros com cargo ADM à thread
-        if ADM_ROLE_ID:
+        # Adiciona membros com cargo ADM à thread (não se aplica a canais normais)
+        if ADM_ROLE_ID and isinstance(channel, discord.Thread):
             adm_role = guild.get_role(ADM_ROLE_ID)
             if adm_role:
                 for member in adm_role.members:
