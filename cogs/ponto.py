@@ -8,10 +8,18 @@ from discord.ext import commands, tasks
 
 from utils.appscript import call_api
 from views.ponto_view import PontoView, build_ponto_embed, fmt_horas, _fmt_week
-from views.registro_view import RegistroView
 
 TIMEZONE: str = os.getenv("TIMEZONE", "America/Sao_Paulo")
 ADM_ROLE_ID: int = int(os.getenv("ADM_ROLE_ID", "0"))
+
+
+def get_week_bounds(now: datetime.datetime) -> tuple[str, str]:
+    # Python weekday(): Monday=0 … Sunday=6
+    # Queremos Sunday=0, então: days_since_sunday = (weekday + 1) % 7
+    days_since_sunday = (now.weekday() + 1) % 7
+    sunday   = now - datetime.timedelta(days=days_since_sunday)
+    saturday = sunday + datetime.timedelta(days=6)
+    return sunday.strftime("%Y-%m-%d"), saturday.strftime("%Y-%m-%d")
 
 _STATUS_ICONS = {
     "aberto":      "⚪",
@@ -133,38 +141,99 @@ class PontoCog(commands.Cog):
             except discord.HTTPException:
                 pass
 
-    ponto = app_commands.Group(name="ponto", description="Controle de ponto")
-    admin = app_commands.Group(
-        name="admin",
-        description="Administração de ponto",
-        parent=ponto,
+    admin = app_commands.Group(name="admin", description="Administração de ponto")
+
+    # ── /ponto ────────────────────────────────────────────────────────────────
+
+    @app_commands.command(
+        name="ponto",
+        description="Publica o painel de controle de ponto nesta thread (criada manualmente)",
     )
+    async def ponto(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer(ephemeral=True)
 
-    # ── /ponto setup ──────────────────────────────────────────────────────────
+        channel = interaction.channel
+        if not isinstance(channel, discord.Thread):
+            await interaction.followup.send(
+                "❌ Use este comando dentro da sua thread de ponto (criada manualmente).",
+                ephemeral=True,
+            )
+            return
 
-    @ponto.command(name="setup", description="Envia o embed de registro no canal atual")
-    @require_adm()
-    async def setup(self, interaction: discord.Interaction) -> None:
-        embed = discord.Embed(
-            title="📋 Sistema de Controle de Ponto",
-            description=(
-                "Bem-vindo ao sistema de ponto!\n\n"
-                "Clique em **Registro** para abrir sua thread semanal de ponto.\n"
-                "A semana vai de **domingo a sábado** com meta de **5 horas semanais**.\n\n"
-                "**Como funciona:**\n"
-                "▶️ **Iniciar Ponto** — Começa a sessão do dia\n"
-                "⏸️ **Pausar / Retomar** — Pausa ou retoma\n"
-                "⏹️ **Fechar Ponto** — Encerra a sessão do dia\n"
-                "📝 **Justificativa** — Necessária se a semana encerrar sem atingir a meta"
-            ),
-            color=discord.Color.blurple(),
+        user  = interaction.user
+        guild = interaction.guild
+        tz    = pytz.timezone(TIMEZONE)
+        now   = datetime.datetime.now(tz)
+        week_start, week_end = get_week_bounds(now)
+
+        reg = await call_api(
+            "register_session",
+            thread_id=str(channel.id),
+            user_id=str(user.id),
+            user_name=user.display_name,
+            week_start=week_start,
+            week_end=week_end,
         )
-        embed.set_footer(text="Clique no botão abaixo para registrar seu ponto")
 
-        await interaction.channel.send(embed=embed, view=RegistroView())
-        await interaction.response.send_message("✅ Embed enviado!", ephemeral=True)
+        if not reg.get("success"):
+            await interaction.followup.send(
+                f"❌ Erro ao registrar sessão: {reg.get('error', 'desconhecido')}",
+                ephemeral=True,
+            )
+            return
 
-    # ── /ponto admin usuarios ─────────────────────────────────────────────────
+        if reg.get("already_exists"):
+            existing_thread_id = int(reg["existing_thread_id"])
+            if existing_thread_id == channel.id:
+                await interaction.followup.send(
+                    "✅ O painel de ponto já está publicado nesta thread.",
+                    ephemeral=True,
+                )
+                return
+
+            existing = guild.get_thread(existing_thread_id)
+            if existing is None:
+                try:
+                    existing = await guild.fetch_channel(existing_thread_id)
+                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                    existing = None
+
+            if existing:
+                await interaction.followup.send(
+                    f"Você já tem uma thread de ponto aberta esta semana!\n"
+                    f"➡️ {existing.mention}\n{existing.jump_url}",
+                    ephemeral=True,
+                )
+            else:
+                await interaction.followup.send(
+                    "Você já tem uma sessão aberta esta semana, mas não foi possível localizar a thread.",
+                    ephemeral=True,
+                )
+            return
+
+        # Adiciona membros com cargo ADM à thread
+        if ADM_ROLE_ID:
+            adm_role = guild.get_role(ADM_ROLE_ID)
+            if adm_role:
+                for member in adm_role.members:
+                    if member.id != user.id:
+                        try:
+                            await channel.add_user(member)
+                        except discord.HTTPException:
+                            pass
+
+        meta_horas = reg.get("meta_horas", 5)
+        embed = build_ponto_embed(user, week_start=week_start, week_end=week_end, meta_horas=meta_horas)
+        header = await channel.send(
+            content=f"**Controle de Ponto Semanal** | {user.mention}",
+            embed=embed,
+            view=PontoView(),
+        )
+        await header.pin()
+
+        await interaction.followup.send("✅ Painel de ponto publicado!", ephemeral=True)
+
+    # ── /admin usuarios ───────────────────────────────────────────────────────
 
     @admin.command(name="usuarios", description="Lista todos os usuários e status do dia")
     @require_adm()
@@ -217,7 +286,7 @@ class PontoCog(commands.Cog):
 
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    # ── /ponto admin setmeta ──────────────────────────────────────────────────
+    # ── /admin setmeta ────────────────────────────────────────────────────────
 
     @admin.command(name="setmeta", description="Define a meta de horas para um usuário")
     @app_commands.describe(usuario="Usuário alvo", horas="Meta em horas (ex: 8 ou 6.5)")
@@ -242,7 +311,7 @@ class PontoCog(commands.Cog):
                 ephemeral=True,
             )
 
-    # ── /ponto admin relatorio ────────────────────────────────────────────────
+    # ── /admin relatorio ──────────────────────────────────────────────────────
 
     @admin.command(name="relatorio", description="Exibe o histórico de ponto de um usuário")
     @app_commands.describe(usuario="Usuário para consultar")

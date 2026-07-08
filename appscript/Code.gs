@@ -30,7 +30,6 @@ function doPost(e) {
 
     const handlers = {
       register_session:  registerSession,
-      get_active_thread: getActiveThread,
       get_status:        getStatus,
       start:             startSession,
       pause:             pauseSession,
@@ -261,15 +260,6 @@ function registerSession(body) {
   ]);
 
   return { success: true, meta_horas: meta, status: "aberto", week_start: week_start, week_end: week_end };
-}
-
-function getActiveThread(body) {
-  var r = findRegistroByWeek(body.user_id, body.week_start);
-  var closed = { "fechado": true, "incompleto": true, "justificado": true };
-  if (r && !closed[r.data[COL.STATUS]]) {
-    return { success: true, thread_id: String(r.data[COL.THREAD_ID]) };
-  }
-  return { success: true, thread_id: null };
 }
 
 function getStatus(body) {
